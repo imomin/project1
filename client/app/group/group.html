@@ -1,0 +1,21 @@
+<div class="container">
+  <p>The delete group and group index api routes are restricted to groups with the 'admin' role.</p>
+  <ul class="list-group user-list">
+    <li class="list-group-item" ng-repeat="g in groupCtrl.groups">
+	    <div class="user-info">
+	        <strong>{{g.name}}</strong><br>
+	        <span class="text-muted">{{g.data}}</span>
+	    </div>
+        <a ng-click="groupCtrl.delete(g)" class="trash"><span class="fa fa-trash fa-2x"></span></a>
+    </li>
+  </ul>
+  <form class="group-form">
+    <label>Syncs in realtime across clients</label>
+    <p class="input-group">
+      <input type="text" class="form-control" placeholder="Add a new group here." ng-model="groupCtrl.newGroup">
+      <span class="input-group-btn">
+        <button type="submit" class="btn btn-primary" ng-click="groupCtrl.addGroup()">Add New</button>
+      </span>
+    </p>
+  </form>
+</div>

@@ -1,0 +1,13 @@
+<div class="container">
+  <p>The delete task and task index api routes are restricted to tasks with the 'admin' role.</p>
+  <ul class="list-group user-list">
+    <li class="list-group-item" ng-repeat="t in taskCtrl.tasks">
+	    <div class="user-info">
+	        <strong>{{t.taskId}}</strong><br>
+	        <span class="text-muted">{{t.name}}</span>
+	    </div>
+        <a ng-click="taskCtrl.delete(t)" class="trash"><span class="fa fa-trash fa-2x"></span></a>
+    </li>
+  </ul>
+  <button ng-click="taskCtrl.addTask()">Add</button>
+</div>
