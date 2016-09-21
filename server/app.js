@@ -65,6 +65,16 @@ cronbox.on('marco', function(data){
 });
 
 
+var cronbox = new Cronbox("6ee6dc86dc990324f52e40cbc62a16ca","foobar==");
+cronbox.set('ping', '* * * * *', {'ding':'dong'});
+cronbox.on('ping', function(data){
+  console.log('*********** data ***********');
+  console.log(data);
+  console.log('*********** data ***********');
+});
+
+
+
 // Start server
 function startServer() {
   app.angularFullstack = server.listen(config.port, config.ip, function() {

@@ -35,7 +35,7 @@ process.on('message', function(message) {
 });
 
 function start(){
-	var intervalId = setInterval(function(){poll();}, (30*1000));
+	var intervalId = setInterval(function(){poll();}, (30*100));
 }
 
 function poll(){

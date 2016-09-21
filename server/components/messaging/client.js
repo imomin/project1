@@ -30,7 +30,7 @@ function CronBox(apiKey, apiSecret) {
 			// 		self.set(item.eventName, item.dtorcron, item.data);
 			// 	}
 			// }
-			if (!message.channel.match(/^\/meta\//)) {
+			if (!message.channel.match(/^\/meta\//) && message.data !== 'undefined') {
 				self.emit(message.channel.substr(message.channel.lastIndexOf("/")+1,message.channel.length),message.data);
 			}
 			callback(message);
@@ -55,7 +55,11 @@ function CronBox(apiKey, apiSecret) {
 		// var channel = this.client ? this.client + '/'+eventName : '/'+eventName;
 		this.cronbox.subscribe('/'+eventName, function(message) {
 			console.log('You should not see this.');
-		}).then(function(obj){console.log(obj)}, function(err){throw err;});
+		}).then(function(data) {
+			  console.log('data: ' + data);
+			}, function(error) {
+			  alert('There was a problem: ' + error.message);
+			});
 
 		// console.log("************marco*************");
 		// console.log('******************========> '+ this.client);
