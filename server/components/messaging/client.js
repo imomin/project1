@@ -11,6 +11,7 @@ function CronBox(apiKey, apiSecret) {
 	this.client;
 	this.cronbox = new CronEvent.Client('http://localhost:8000/cronbox');
 	this.pendingQueue = [];
+	this.attachedData = {};
 	if (!this.apiKey) {
     	throw new Error('No apiKey found');
 	}
@@ -19,9 +20,9 @@ function CronBox(apiKey, apiSecret) {
 	}
 	this.cronbox.addExtension({
 		incoming: function(message, callback) {
-			// console.log('*************INCOMING***************');
-			// console.log(message);
-			// console.log('*************INCOMING***************');
+			console.log('*************INCOMING***************');
+			console.log(message);
+			console.log('*************INCOMING***************');
 			// if(message.channel === '/meta/subscribe') {
 			// 	if(!self.client) self.client = message.subscription.substr(message.subscription.indexOf("/"),message.subscription.lastIndexOf("/"));
 			// 	console.log(self.pendingQueue);
@@ -36,9 +37,30 @@ function CronBox(apiKey, apiSecret) {
 			callback(message);
 		},
 		outgoing: function(message, callback) {
+			// { channel: '/meta/subscribe',
+			//   clientId: 'mhgl0p4hhavqn8hnn7p8b50fp29bp6y',
+			//   subscription: '/marco',
+			//   id: '3',
+			//   ext: 
+			//    { apiKey: '009e0bccee06bfc7c8e0472b0898d03c',
+			//      apiSecret: 'blahblah==' } 
+			// }
 			message.ext = message.ext || {};
 			message.ext.apiKey = self.apiKey;
 			message.ext.apiSecret = self.apiSecret;
+			try	{
+				if(message.subscription){
+					var eventName = message.subscription.replace("/","");
+					console.log('subscription ' + eventName);
+					console.log('attachedData ' + self.attachedData[eventName]);
+					message.ext.data = self.attachedData[eventName];
+					delete self.attachedData[eventName];
+				}
+			}
+			catch (err) {
+				console.log(err);
+			}
+			
 			console.log('*************OUTGOING***************');
 			console.log(message);
 			console.log('*************OUTGOING***************');
@@ -52,13 +74,21 @@ function CronBox(apiKey, apiSecret) {
 	// });
 
 	this.set = function(eventName, dtorcron, data) {
+		if (!eventName && !eventName.match(/^[A-Za-z][A-Za-z0-9]*$/)) {
+	    	throw new Error('Enter a valid event name.');
+		}
+		if (!dtorcron) {
+	    	throw new Error('Enter a valid cron syntax or a date.');
+		}
+		data = data || {};
+		this.attachedData[eventName] = {'dtorcron':dtorcron,'data':data};
 		// var channel = this.client ? this.client + '/'+eventName : '/'+eventName;
 		this.cronbox.subscribe('/'+eventName, function(message) {
 			console.log('You should not see this.');
-		}).then(function(data) {
-			  console.log('data: ' + data);
+		}).then(function() {
+				console.log('Connected!');
 			}, function(error) {
-			  alert('There was a problem: ' + error.message);
+				console.log('There was a problem: ' + error.message);
 			});
 
 		// console.log("************marco*************");

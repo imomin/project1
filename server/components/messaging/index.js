@@ -23,6 +23,7 @@ var bayeux = new faye.NodeAdapter({mount: '/cronbox', timeout: 45,
 	    host:'localhost',
 	    port:6379
 	}});
+var client = bayeux.getClient();
 
 	bayeux.addWebsocketExtension(deflate);
 
@@ -53,6 +54,23 @@ var bayeux = new faye.NodeAdapter({mount: '/cronbox', timeout: 45,
 	  	if(id) {
 	  		console.log('id2 ' + id);
   			if(message.channel === '/meta/subscribe' || message.channel === '/meta/unsubscribe'){
+				console.log("########################################");
+				console.log(message.ext);
+				console.log("########################################");
+
+				if(message.ext.data){
+					var name = message.subscription.replace("/","");
+					console.log("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$");
+					try {
+						db.collection('tasks').findOneAndUpdate({'name':name, user: new ObjectId(id)},{$set:{cron:message.ext.data.dtorcron,data:message.ext.data.data}}, {upsert:true,returnNewDocument:true}, function(err, task){
+							
+						});
+					}
+					catch (e){
+					   console.log(e);
+					}
+					console.log("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$");
+				}
 				message.subscription = '/'+id + message.subscription;
 			}
 			return callback(message);
@@ -64,8 +82,24 @@ var bayeux = new faye.NodeAdapter({mount: '/cronbox', timeout: 45,
 			console.log(doc);
 			if(doc){
 				authCache.set(apiKey+':'+apiSecret,doc._id);
-				//authCache.set(doc._id,{'apiKey':apiKey,'apiSecret':apiSecret});
+				authCache.set(doc._id,message.ext);
 				if(message.channel === '/meta/subscribe' || message.channel === '/meta/unsubscribe'){
+					console.log("########################################");
+					console.log(message.ext);
+					console.log("########################################");
+					if(message.ext.data){
+						var name = message.subscription.replace("/","");
+						console.log("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$");
+						try {
+							db.collection('tasks').findOneAndUpdate({'name':name, user: new ObjectId(doc._id)},{$set:{cron:message.ext.data.dtorcron,data:message.ext.data.data}}, {upsert:true,returnNewDocument:true}, function(err, task){
+								
+							});
+						}
+						catch (e){
+						   console.log(e);
+						}
+						console.log("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$");
+					}
 					message.subscription = '/'+doc._id + message.subscription;
 				}
 				delete message.ext.apiKey;
@@ -96,9 +130,9 @@ var bayeux = new faye.NodeAdapter({mount: '/cronbox', timeout: 45,
 		},
 
 		outgoing: function(message, callback) {
-			console.log('*************OUTGOING***************');
-			console.log(message);
-			console.log('*************OUTGOING***************');
+			// console.log('*************OUTGOING***************');
+			// console.log(message);
+			// console.log('*************OUTGOING***************');
 			if (message.ext) {
 				delete message.ext.apiKey;
 				delete message.ext.apiSecret;
@@ -112,49 +146,49 @@ var bayeux = new faye.NodeAdapter({mount: '/cronbox', timeout: 45,
 
 
 
-// var client = bayeux.getClient();
 
-// client.addExtension({
-// 	outgoing: function(message, callback) {
 
-// 		/*
-// 			id: '3',
-// 			clientId: 'ssegxynygqbqb4iowz0k14gf7jnnyro',
-// 			channel: '/meta/subscribe',
-// 			successful: true,
-// 			subscription: '/57a7c0edbd0418f7b299df2f/ping'
-// 		*/
-// 		console.log('*************CLIENT OUTGOING***************');
-// 		console.log(message);
-// 		console.log('*************CLIENT OUTGOING***************');
-// 		//var channel = message.subscription || message.channel;
-// 		//var id = channel.substr(channel.indexOf("/"),channel.lastIndexOf("/")).replace("/","");
-// 		//var authPair = authCache.get(id);
-// 		message.ext = message.ext || {};
-// 		// if(authPair){
-// 		// 	message.ext.apiKey = authPair.apiKey;
-// 		// 	message.ext.apiSecret = authPair.apiSecret;
-// 		// }
-// 		// else {
-// 			message.ext.apiKey = "adminprivateapikey";
-// 			message.ext.apiSecret = "adminprivatesecretkey";
-// 		// }
-// 		callback(message)
-// 	}
-// });
+client.addExtension({
+	outgoing: function(message, callback) {
 
-// function publishTask(channel, data){
-// 	client.publish('/'+channel, data);
-// }
+		/*
+			id: '3',
+			clientId: 'ssegxynygqbqb4iowz0k14gf7jnnyro',
+			channel: '/meta/subscribe',
+			successful: true,
+			subscription: '/57a7c0edbd0418f7b299df2f/ping'
+		*/
+		// console.log('*************CLIENT OUTGOING***************');
+		// console.log(message);
+		// console.log('*************CLIENT OUTGOING***************');
+		//var channel = message.subscription || message.channel;
+		//var id = channel.substr(channel.indexOf("/"),channel.lastIndexOf("/")).replace("/","");
+		//var authPair = authCache.get(id);
+		message.ext = message.ext || {};
+		// if(authPair){
+		// 	message.ext.apiKey = authPair.apiKey;
+		// 	message.ext.apiSecret = authPair.apiSecret;
+		// }
+		// else {
+			message.ext.apiKey = "adminprivateapikey";
+			message.ext.apiSecret = "adminprivatesecretkey";
+		// }
+		callback(message)
+	}
+});
 
-// function ticktock(){
-// 	publishTask('57a7c0edbd0418f7b299df2e/marco', {data:'mydata',mydate:new Date().toString()});
-// 	publishTask('57a7c0edbd0418f7b299df2f/ping', {'ding':'dong'});
-// 	setTimeout(function(){
-// 		ticktock();
-// 	},5000);
-// }
-// ticktock();
+function publishTask(channel, data){
+	client.publish('/'+channel, data);
+}
+
+function ticktock(){
+	publishTask('57a7c0edbd0418f7b299df2e/marco', {data:'mydata',mydate:new Date().toString()});
+	publishTask('57a7c0edbd0418f7b299df2f/ping', {'ding':'dong'});
+	setTimeout(function(){
+		ticktock();
+	},5000);
+}
+ticktock();
 
 process.on('SIGTERM', function () {
   db.close();
