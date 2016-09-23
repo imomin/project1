@@ -6,9 +6,10 @@ var http = require('http'),
     MongoClient = require('mongodb').MongoClient,
 	ObjectId = require('mongodb').ObjectID,
 	NodeCache = require( "node-cache" ),
-	db;
-	authCache = new NodeCache({ stdTTL: 3600, checkperiod: 2400 });
-
+	db,
+	authCache = new NodeCache({ stdTTL: 3600, checkperiod: 2400 }),
+	CronQueue = require('./CronEventQueue');
+	cronQueue = new CronQueue();
 
 var dburl = 'mongodb://localhost:27017/cronbox-dev';
 	MongoClient.connect(dburl, function(err, database) {
@@ -63,7 +64,7 @@ var client = bayeux.getClient();
 					console.log("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$");
 					try {
 						db.collection('tasks').findOneAndUpdate({'name':name, user: new ObjectId(id)},{$set:{cron:message.ext.data.dtorcron,data:message.ext.data.data}}, {upsert:true,returnNewDocument:true}, function(err, task){
-							
+							cronQueue.set(task.value.user, task.value.name, task.value.cron, task.value.data);
 						});
 					}
 					catch (e){
@@ -89,16 +90,16 @@ var client = bayeux.getClient();
 					console.log("########################################");
 					if(message.ext.data){
 						var name = message.subscription.replace("/","");
-						console.log("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$");
+						console.log("????????????????????????????????????");
 						try {
 							db.collection('tasks').findOneAndUpdate({'name':name, user: new ObjectId(doc._id)},{$set:{cron:message.ext.data.dtorcron,data:message.ext.data.data}}, {upsert:true,returnNewDocument:true}, function(err, task){
-								
+								cronQueue.set(task.value.user, task.value.name, task.value.cron, task.value.data);
 							});
 						}
 						catch (e){
 						   console.log(e);
 						}
-						console.log("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$");
+						console.log("?????????????????????????????????????");
 					}
 					message.subscription = '/'+doc._id + message.subscription;
 				}
@@ -148,47 +149,47 @@ var client = bayeux.getClient();
 
 
 
-client.addExtension({
-	outgoing: function(message, callback) {
+// client.addExtension({
+// 	outgoing: function(message, callback) {
 
-		/*
-			id: '3',
-			clientId: 'ssegxynygqbqb4iowz0k14gf7jnnyro',
-			channel: '/meta/subscribe',
-			successful: true,
-			subscription: '/57a7c0edbd0418f7b299df2f/ping'
-		*/
-		// console.log('*************CLIENT OUTGOING***************');
-		// console.log(message);
-		// console.log('*************CLIENT OUTGOING***************');
-		//var channel = message.subscription || message.channel;
-		//var id = channel.substr(channel.indexOf("/"),channel.lastIndexOf("/")).replace("/","");
-		//var authPair = authCache.get(id);
-		message.ext = message.ext || {};
-		// if(authPair){
-		// 	message.ext.apiKey = authPair.apiKey;
-		// 	message.ext.apiSecret = authPair.apiSecret;
-		// }
-		// else {
-			message.ext.apiKey = "adminprivateapikey";
-			message.ext.apiSecret = "adminprivatesecretkey";
-		// }
-		callback(message)
-	}
-});
+// 		/*
+// 			id: '3',
+// 			clientId: 'ssegxynygqbqb4iowz0k14gf7jnnyro',
+// 			channel: '/meta/subscribe',
+// 			successful: true,
+// 			subscription: '/57a7c0edbd0418f7b299df2f/ping'
+// 		*/
+// 		// console.log('*************CLIENT OUTGOING***************');
+// 		// console.log(message);
+// 		// console.log('*************CLIENT OUTGOING***************');
+// 		//var channel = message.subscription || message.channel;
+// 		//var id = channel.substr(channel.indexOf("/"),channel.lastIndexOf("/")).replace("/","");
+// 		//var authPair = authCache.get(id);
+// 		message.ext = message.ext || {};
+// 		// if(authPair){
+// 		// 	message.ext.apiKey = authPair.apiKey;
+// 		// 	message.ext.apiSecret = authPair.apiSecret;
+// 		// }
+// 		// else {
+// 			message.ext.apiKey = "adminprivateapikey";
+// 			message.ext.apiSecret = "adminprivatesecretkey";
+// 		// }
+// 		callback(message)
+// 	}
+// });
 
-function publishTask(channel, data){
-	client.publish('/'+channel, data);
-}
+// function publishTask(channel, data){
+// 	client.publish('/'+channel, data);
+// }
 
-function ticktock(){
-	publishTask('57a7c0edbd0418f7b299df2e/marco', {data:'mydata',mydate:new Date().toString()});
-	publishTask('57a7c0edbd0418f7b299df2f/ping', {'ding':'dong'});
-	setTimeout(function(){
-		ticktock();
-	},5000);
-}
-ticktock();
+// function ticktock(){
+// 	publishTask('57a7c0edbd0418f7b299df2e/marco', {data:'mydata',mydate:new Date().toString()});
+// 	publishTask('57a7c0edbd0418f7b299df2f/ping', {'ding':'dong'});
+// 	setTimeout(function(){
+// 		ticktock();
+// 	},5000);
+// }
+// ticktock();
 
 process.on('SIGTERM', function () {
   db.close();

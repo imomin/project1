@@ -20,9 +20,9 @@ function CronBox(apiKey, apiSecret) {
 	}
 	this.cronbox.addExtension({
 		incoming: function(message, callback) {
-			console.log('*************INCOMING***************');
-			console.log(message);
-			console.log('*************INCOMING***************');
+			// console.log('*************INCOMING***************');
+			// console.log(message);
+			// console.log('*************INCOMING***************');
 			// if(message.channel === '/meta/subscribe') {
 			// 	if(!self.client) self.client = message.subscription.substr(message.subscription.indexOf("/"),message.subscription.lastIndexOf("/"));
 			// 	console.log(self.pendingQueue);
@@ -51,8 +51,8 @@ function CronBox(apiKey, apiSecret) {
 			try	{
 				if(message.subscription){
 					var eventName = message.subscription.replace("/","");
-					console.log('subscription ' + eventName);
-					console.log('attachedData ' + self.attachedData[eventName]);
+					// console.log('subscription ' + eventName);
+					// console.log('attachedData ' + self.attachedData[eventName]);
 					message.ext.data = self.attachedData[eventName];
 					delete self.attachedData[eventName];
 				}
@@ -61,9 +61,9 @@ function CronBox(apiKey, apiSecret) {
 				console.log(err);
 			}
 			
-			console.log('*************OUTGOING***************');
-			console.log(message);
-			console.log('*************OUTGOING***************');
+			// console.log('*************OUTGOING***************');
+			// console.log(message);
+			// console.log('*************OUTGOING***************');
 			callback(message);
 		}
 	});
