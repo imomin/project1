@@ -9,42 +9,115 @@ var http = require('http'),
 	db,
 	authCache = new NodeCache({ stdTTL: 3600, checkperiod: 2400 }),
 	CronQueue = require('./CronEventQueue');
-	cronQueue = new CronQueue();
+	cronQueue = new CronQueue(),
+	HashMap = require('hashmap'),
+	map = new HashMap();
+
+ function isJsonEqual(w, x) {
+  var p, x1, x2;
+  x1 = JSON.parse(JSON.stringify(w));
+  x2 = JSON.parse(JSON.stringify(x));
+  p = null;
+  for (p in x1) {
+    if (typeof x2[p] === 'undefined') {
+      return false;
+    }
+  }
+  for (p in x1) {
+    if (x1[p]) {
+      switch (typeof x1[p]) {
+        case 'object':
+          if (!isJsonEqual(x1[p],x2[p])) {
+            return false;
+          }
+          break;
+        case 'function':
+          if (typeof x2[p] === 'undefined' || (p !== 'equals' && x1[p].toString() !== x2[p].toString())) {
+            return false;
+          }
+          break;
+        default:
+          if (x1[p] !== x2[p]) {
+            return false;
+          }
+      }
+    } else {
+      if (x2[p]) {
+        return false;
+      }
+    }
+  }
+  for (p in x2) {
+    if (typeof x1[p] === 'undefined') {
+      return false;
+    }
+  }
+  return true;
+};
 
 var dburl = 'mongodb://localhost:27017/cronbox-dev';
 	MongoClient.connect(dburl, function(err, database) {
 	    if(err) console.log(err);
-	    db = database;
 	    console.log("DB Connection");
+	    db = database;
+	    let cursor = db.collection('tasks').find({name:/task/});
+	    cursor.on("data", function(task) {
+		if (task){
+			map.set(task.user+':'+task.name, {'dtorcron':task.cron,'data':task.data});
+		}
+		else {
+			console.log("done populating data");	
+		}
 	});
 
-var bayeux = new faye.NodeAdapter({mount: '/cronbox', timeout: 45,
-		engine:{
-	    type:fayeRedis,
-	    host:'localhost',
-	    port:6379
-	}});
-var client = bayeux.getClient();
+	// When the stream is done
+	cursor.on("end", function() {
+		console.log("cursor ended.");
+		initialize();
+	});
+	    
+	});
 
-	bayeux.addWebsocketExtension(deflate);
+function initialize() {
+	var bayeux = new faye.NodeAdapter({mount: '/cronbox', timeout: 45,
+			engine:{
+		    type:fayeRedis,
+		    host:'localhost',
+		    port:6379
+		}});
 
-	// var authorized = function(message, callback) {
-	//   var apiKey = message.ext && message.ext.apiKey;
-	//   var apiSecret = message.ext && message.ext.apiSecret;
-	//   if(apiKey === "009e0bccee06bfc7c8e0472b0898d03c" && apiSecret === "blahblah=="){
-	//   	console.log(message.channel);
-	// 	if(message.channel === '/meta/subscribe' || message.channel === '/meta/unsubscribe'){
-	// 		message.subscription = '/57a7c0edbd0418f7b299df2e' + message.subscription;
-	// 	}
-	// 	delete message.ext.apiKey;
-	// 	delete message.ext.apiSecret;
-	//   	return callback(message);
-	//   }
-	//   	message.error = '403::Authentication required';
-	//   	return callback(message);
-	// };
+	var client = bayeux.getClient();
 
-	var authorized2 = function(message, callback){
+		bayeux.addWebsocketExtension(deflate);
+
+	var processAuth = function(id, message, callback){
+		if(message.channel === '/meta/subscribe' || message.channel === '/meta/unsubscribe'){
+			if(message.ext.data){
+				var name = message.subscription.replace("/","");
+				var mapData = map.get(id+':'+name) || {};
+				if(!isJsonEqual({'dtorcron':message.ext.data.dtorcron,'data':message.ext.data.data}, mapData)){
+					try {
+						db.collection('tasks').findOneAndUpdate({'name':name, user: new ObjectId(id)},{$set:{cron:message.ext.data.dtorcron,data:message.ext.data.data}}, {upsert:true,returnOriginal:false}, function(err, task){
+							console.log(task);
+							cronQueue.set(task.value.user, task.value.name, task.value.cron, task.value.data);
+						});
+					}
+					catch (e){
+					   console.log(e);
+					}
+				}
+				else {
+					cronQueue.set(id, name, message.ext.data.dtorcron, message.ext.data.data);
+				}
+			}
+			message.subscription = '/'+ id + message.subscription;
+		}
+		delete message.ext.apiKey;
+		delete message.ext.apiSecret;
+		return callback(message);
+	}
+
+	var authorized = function(message, callback){
 		var apiKey = message.ext && message.ext.apiKey;
 	  	var apiSecret = message.ext && message.ext.apiSecret;
 	  	if(!apiKey && !apiSecret){
@@ -53,61 +126,14 @@ var client = bayeux.getClient();
 	  	}
 	  	var id = authCache.get(apiKey+':'+apiSecret);
 	  	if(id) {
-	  		console.log('id2 ' + id);
-  			if(message.channel === '/meta/subscribe' || message.channel === '/meta/unsubscribe'){
-				console.log("########################################");
-				console.log(message.ext);
-				console.log("########################################");
-
-				if(message.ext.data){
-					var name = message.subscription.replace("/","");
-					console.log("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$");
-					try {
-						db.collection('tasks').findOneAndUpdate({'name':name, user: new ObjectId(id)},{$set:{cron:message.ext.data.dtorcron,data:message.ext.data.data}}, {upsert:true,returnNewDocument:true}, function(err, task){
-							cronQueue.set(task.value.user, task.value.name, task.value.cron, task.value.data);
-						});
-					}
-					catch (e){
-					   console.log(e);
-					}
-					console.log("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$");
-				}
-				message.subscription = '/'+id + message.subscription;
-			}
-			return callback(message);
+			return processAuth(id,message,callback);
 	  	}
-	  	console.log('apikey: ' + apiKey + ' secretkey: ' + apiSecret);
 		db && db.collection('users').findOne({'apikey':apiKey,'secretkey':apiSecret}, {_id:1}, function(err, doc){
 			if(err) console.log(err);
-			console.log('waiting for data...');
-			console.log(doc);
 			if(doc){
 				authCache.set(apiKey+':'+apiSecret,doc._id);
 				authCache.set(doc._id,message.ext);
-				if(message.channel === '/meta/subscribe' || message.channel === '/meta/unsubscribe'){
-					console.log("########################################");
-					console.log(message.ext);
-					console.log("########################################");
-					if(message.ext.data){
-						var name = message.subscription.replace("/","");
-						console.log("????????????????????????????????????");
-						try {
-							db.collection('tasks').findOneAndUpdate({'name':name, user: new ObjectId(doc._id)},{$set:{cron:message.ext.data.dtorcron,data:message.ext.data.data}}, {upsert:true,returnNewDocument:true}, function(err, task){
-								cronQueue.set(task.value.user, task.value.name, task.value.cron, task.value.data);
-							});
-						}
-						catch (e){
-						   console.log(e);
-						}
-						console.log("?????????????????????????????????????");
-					}
-					message.subscription = '/'+doc._id + message.subscription;
-				}
-				delete message.ext.apiKey;
-				delete message.ext.apiSecret;
-				console.log("MESSAGE");
-				console.log(message);
-				return callback(message);
+				return processAuth(doc._id,message,callback);
 			}
 			else {
 				console.log('no data found.');
@@ -116,93 +142,33 @@ var client = bayeux.getClient();
 		});
 	}
 
-	bayeux.addExtension({
-		incoming: function(message, callback) {
-			console.log('*************INCOMING***************');
-			console.log(message);
-			console.log('*************INCOMING***************');
-			//if (!message.channel.match(/^\/meta\//)) {
-				authorized2(message, callback);
-				// if (!authorized(message)){
-				//   message.error = '403::Authentication required';
-				// }
-			//}
-			//callback(message);
-		},
+		bayeux.addExtension({
+			incoming: function(message, callback) {
+				authorized(message, callback);
+			},
 
-		outgoing: function(message, callback) {
-			// console.log('*************OUTGOING***************');
-			// console.log(message);
-			// console.log('*************OUTGOING***************');
-			if (message.ext) {
-				delete message.ext.apiKey;
-				delete message.ext.apiSecret;
+			outgoing: function(message, callback) {
+				if (message.ext) {
+					delete message.ext.apiKey;
+					delete message.ext.apiSecret;
+				}
+				callback(message);
 			}
-			callback(message);
-		}
+		});
+
+
+		process.on('SIGTERM', function () {
+		  db.close();
+		  console.log('About to exit with code: ${code}');
+		});
+
+
+	// Handle non-Bayeux requests
+	var server = http.createServer(function(request, response) {
+		response.writeHead(200, {'Content-Type': 'text/plain'});
+		response.end('Hello, non-Bayeux request');
 	});
 
-
-
-
-
-
-
-
-// client.addExtension({
-// 	outgoing: function(message, callback) {
-
-// 		/*
-// 			id: '3',
-// 			clientId: 'ssegxynygqbqb4iowz0k14gf7jnnyro',
-// 			channel: '/meta/subscribe',
-// 			successful: true,
-// 			subscription: '/57a7c0edbd0418f7b299df2f/ping'
-// 		*/
-// 		// console.log('*************CLIENT OUTGOING***************');
-// 		// console.log(message);
-// 		// console.log('*************CLIENT OUTGOING***************');
-// 		//var channel = message.subscription || message.channel;
-// 		//var id = channel.substr(channel.indexOf("/"),channel.lastIndexOf("/")).replace("/","");
-// 		//var authPair = authCache.get(id);
-// 		message.ext = message.ext || {};
-// 		// if(authPair){
-// 		// 	message.ext.apiKey = authPair.apiKey;
-// 		// 	message.ext.apiSecret = authPair.apiSecret;
-// 		// }
-// 		// else {
-// 			message.ext.apiKey = "adminprivateapikey";
-// 			message.ext.apiSecret = "adminprivatesecretkey";
-// 		// }
-// 		callback(message)
-// 	}
-// });
-
-// function publishTask(channel, data){
-// 	client.publish('/'+channel, data);
-// }
-
-// function ticktock(){
-// 	publishTask('57a7c0edbd0418f7b299df2e/marco', {data:'mydata',mydate:new Date().toString()});
-// 	publishTask('57a7c0edbd0418f7b299df2f/ping', {'ding':'dong'});
-// 	setTimeout(function(){
-// 		ticktock();
-// 	},5000);
-// }
-// ticktock();
-
-process.on('SIGTERM', function () {
-  db.close();
-  console.log('About to exit with code: ${code}');
-});
-
-
-// Handle non-Bayeux requests
-var server = http.createServer(function(request, response) {
-	response.writeHead(200, {'Content-Type': 'text/plain'});
-	response.end('Hello, non-Bayeux request');
-});
-
-bayeux.attach(server);
-server.listen(8000);
-
+		bayeux.attach(server);
+		server.listen(8000);
+}

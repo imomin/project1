@@ -1,9 +1,5 @@
-var util = require('util')
-var EventEmitter = require('events').EventEmitter
-var EventEmitter3 = require('eventemitter3')
 var later = require('later')
 var Heap = require('heap')
-var EE = new EventEmitter3()
 
 var faye = require('faye');
 var client = new faye.Client('http://localhost:8000/cronbox');
@@ -26,7 +22,6 @@ client.addExtension({
 
 // cron expr starts with seconds
 function Task(userNamespace, eventName, cron, minTick, jsondata, repeate) {
-  console.log(arguments);
   this.id = userNamespace
   this.eventName = eventName
   this.cron = repeate ? cron : null
@@ -80,9 +75,6 @@ function CronTicker() {
         add(t.id, newT)
       }
       //self.emit('task', t.id, t.nextTick, newT.nextTick, newT.jsondata );
-      // self.emit(t.id+':'+t.eventName, t.id, t.jsondata);
-      //EE.emit(t.id+':'+t.eventName, t.id, t.jsondata);
-      console.log("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@");
       client.publish('/'+t.id+'/'+ t.eventName, t.jsondata);
     }
     return
@@ -90,9 +82,6 @@ function CronTicker() {
 
 this.set = function(_id, eventName, tcron, jsondata) {
     _id = String(_id)
-    console.log('>>>>>>>>>>>>>>>>>>>>>>>');
-    console.log(arguments);
-    console.log('>>>>>>>>>>>>>>>>>>>>>>>');
 
     var repeate = (new Date(parseInt(tcron))).getTime() > 0 ? false : true;
     //create new instance of Task.
@@ -147,36 +136,5 @@ this.set = function(_id, eventName, tcron, jsondata) {
     }
   }
 }
-util.inherits(CronTicker, EventEmitter)
 
 module.exports = CronTicker
-
-/*
-SUDO
-
-var cronbox = new Cronbox({consumerKey : 'xyz'});
-
-//usage 1
-cronbox.schedule('dosomething','* * * * *', {'data':'stuff'});
-cronbox.on('dosomething', function(data){
-  
-})
-cronbox.on('dosomething').then(function(data){
-  
-});
-cronbox.list();
-cronbox.remove(_id);
-cronbox.pause(_id);
-cronbox.resume(_id);
-//usage 2
-cronbox.schedule('* * * * *', {'data':'stuff'}, function(data){
-  
-});
-//usage 3
-cronbox.schedule('* * * * *', {'data':'stuff'}).then(function(data){
-  
-});
-
-
-
-*/
