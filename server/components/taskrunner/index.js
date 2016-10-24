@@ -49,15 +49,15 @@ module.exports = class Runner extends events.EventEmitter {
         thisScope._startTime = new Date();
         //this._startTime.setMinutes(this._startTime.getMinutes()+1)
     }
-    this.findAllAsync();
-    // thisScope.getTask(function(err, data){
-    //     console.log(((new Date().getTime() - thisScope._startTime)/1000));
-    //     thisScope._startTime = null;
-    //     //thisScope.start();
-    //     process.nextTick(function() {
-    //       thisScope.start();
-    //     });
-    // })
+    //this.findAllAsync();
+    thisScope.getTask(function(err, data){
+        console.log(((new Date().getTime() - thisScope._startTime)/1000));
+        thisScope._startTime = null;
+        //thisScope.start();
+        process.nextTick(function() {
+          thisScope.start();
+        });
+    })
   }
   
   stop() {
@@ -95,17 +95,18 @@ module.exports = class Runner extends events.EventEmitter {
     getTask(fn) {
         let now = new Date();
         let tickDate = new Date(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(),  now.getUTCHours(), now.getUTCMinutes(), now.getUTCSeconds());
-        Task.findOneAndUpdate(
-            //{$and:[
-            {'isActive': true, 'isLocked':false, 'isPaused':false, 'runAt': {$lt:tickDate}},
-            //{$or: [{'stopAt':{$exists:true}}, {'stopAt':{$gte: new Date(tickDate)}}]}
-            //]},
-            {
-            'isLocked': true,
-            'startedAt': tickDate
-            },
-            {new:true}
-        ).lean().exec(fn);
+        // Task.findOneAndUpdate(
+        //     //{$and:[
+        //     {'isActive': true, 'isLocked':false, 'isPaused':false, 'runAt': {$lt:tickDate}},
+        //     //{$or: [{'stopAt':{$exists:true}}, {'stopAt':{$gte: new Date(tickDate)}}]}
+        //     //]},
+        //     {
+        //     'isLocked': true,
+        //     'startedAt': tickDate
+        //     },
+        //     {new:true}
+        // ).lean().exec(fn);
+        this.findAll();
     }
 
     findCursor(){
@@ -113,7 +114,7 @@ module.exports = class Runner extends events.EventEmitter {
         let now = new Date();
         let tickDate = new Date(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(),  now.getUTCHours(), now.getUTCMinutes(), now.getUTCSeconds());
         var opts = {'runAt':{$lte:tickDate}};
-        var stream = Task.find(opts).tailable(true, {awaitdata:true, numberOfRetries:-1}).lean().cursor();
+        var stream = Task.find(opts).tailable(false, {awaitdata:true, numberOfRetries:-1}).lean().cursor();
 
         stream.on('data', function(task){
             console.log(task);
@@ -143,7 +144,7 @@ module.exports = class Runner extends events.EventEmitter {
         var start = new Date().getTime();
         let now = new Date();
         let tickDate = new Date(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(),  now.getUTCHours(), now.getUTCMinutes(), now.getUTCSeconds());
-        const stream = Task.find({'isActive': true, 'isLocked':false, 'isPaused':false, 'runAt': {$lte:tickDate}}).lean().limit(5000).cursor();
+        const stream = Task.find({'isActive': true, 'isLocked':false, 'isPaused':false, 'runAt': {$lte:tickDate}}).lean().cursor();
         // Print every document that matches the query, one at a time
         stream.on('data', task => {
             thisScope._roundRobbin += 1;
@@ -222,23 +223,24 @@ module.exports = class Runner extends events.EventEmitter {
         Task.update({'isActive': true, 'isLocked':false, 'isPaused':false, 'runAt': {$lte:tickDate}}, {$set: {'isLocked': true, 'startedAt': tickDate}}, {multi:true}, function (err, res) {
             if(err) self.handleError(err,null);
                 console.log(res);
-                // const stream = Task.find({'isActive': true, 'isLocked':true, 'isPaused':false, 'startedAt': {$eq:tickDate}}).lean().cursor();
-                // // Print every document that matches the query, one at a time
-                // stream.on('data', task => {
-                //     // threads[thisScope._roundRobbin % threadCount].send(task);
-                //     // thisScope._roundRobbin += 1;
-                // });
-                // stream.on('end', () => {
-                //     console.log('Done!');
-                //     var end = new Date().getTime();
-                //     var time = ((end - start)/1000);
-                //     console.log(time.toString() + '!');
-                //     //child.send('exit');
-                //     for (var i = 0; i < threadCount; i++) {
-                //        // threads[i].send('exit');
-                //     };
+                const stream = Task.find({'isActive': true, 'isLocked':true, 'isPaused':false, 'startedAt': {$eq:tickDate}}).lean().cursor();
+                // Print every document that matches the query, one at a time
+                stream.on('data', task => {
+                    // threads[thisScope._roundRobbin % threadCount].send(task);
+                    // thisScope._roundRobbin += 1;
+                    thisScope.rescheduled(task);
+                });
+                stream.on('end', () => {
+                    console.log('Done!');
+                    var end = new Date().getTime();
+                    var time = ((end - start)/1000);
+                    console.log(time.toString() + '!');
+                    //child.send('exit');
+                    for (var i = 0; i < threadCount; i++) {
+                       // threads[i].send('exit');
+                    };
                     thisScope.start();
-                // });
+                });
         });
     }
 
@@ -284,6 +286,18 @@ module.exports = class Runner extends events.EventEmitter {
     //     return this;
     // }
 
+ rescheduled(task){
+     this._task = task;
+     let parseCron = later.parse.cron(this._task.cron);
+     let nextRunDate = later.schedule(parseCron).next();
+     let now = new Date();
+     let tickDate = new Date(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(),  now.getUTCHours(), now.getUTCMinutes(), now.getUTCSeconds());
+     let utcDatetime = new Date(nextRunDate.getUTCFullYear(), nextRunDate.getUTCMonth(), nextRunDate.getUTCDate(),  nextRunDate.getUTCHours(), nextRunDate.getUTCMinutes(), nextRunDate.getUTCSeconds());
+     Task.findByIdAndUpdate(this._task._id, { $set: {'isLocked': false,'lastError':null, 'lastProcessedAt':tickDate, 'runAt':utcDatetime}}, function (err, tsk) {
+       if(err) self.handleError(err,tsk);
+       //self.emitTaskEvent('rescheduled',tsk._id,{'status':'rescheduled'});
+     });
+   }
 
 
 }
